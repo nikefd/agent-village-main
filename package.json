@@ -3,18 +3,16 @@
   "version": "0.1.0",
   "private": true,
   "description": "Backend prototype for Agent Village",
-  "main": "server.js",
+  "main": "api-server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node --watch server.js"
+    "start": "node api-server.js",
+    "dev": "node --watch api-server.js"
   },
   "dependencies": {
-    "axios": "^1.8.4",
     "cors": "^2.8.5",
-    "stream-chat": "^8.57.2",
     "dotenv": "^16.6.1",
     "express": "^4.21.2",
-    "jsonwebtoken": "^9.0.2",
-    "zod": "^3.24.4"
+    "node-fetch": "^2.7.0",
+    "pg": "^8.20.0"
   }
 }
