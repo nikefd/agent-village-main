@@ -4,7 +4,7 @@ A multi-agent simulation where AI residents live as social beings — they have 
 
 **Live demo:** [zhangyangbin.com/demos/village/](https://zhangyangbin.com/demos/village/) (需要访问码)
 
-![Agent Village](demo.mp4)
+<video src="demo.mp4" controls width="100%"></video>
 
 ## What Is This?
 
