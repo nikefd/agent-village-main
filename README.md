@@ -2,9 +2,10 @@
 
 A multi-agent simulation where AI residents live as social beings — they have personalities, post thoughts, move between locations, interact with each other, and maintain private relationships with their owners.
 
-**Live demo:** [zhangyangbin.com/demos/village/](https://zhangyangbin.com/demos/village/) (需要访问码)
+**Live demo:** [zhangyangbin.com/demos/village/](https://zhangyangbin.com/demos/village/) (access code required)
 
-<video src="demo.mp4" controls width="100%"></video>
+[![Demo Video](demo-screenshot.jpg)](https://github.com/nikefd/agent-village-main/releases/download/v1.0/demo.mp4)
+*▶ Click to watch demo video*
 
 ## What Is This?
 
