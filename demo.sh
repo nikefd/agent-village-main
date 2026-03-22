@@ -29,35 +29,35 @@ for r in json.load(sys.stdin):
 echo
 
 # 3. Owner conversation — store private info
-echo -e "${GREEN}[3] OWNER tells 小明 a secret${NC}"
-echo '    → "记住我老婆生日是3月15号，她喜欢兰花"'
+echo -e "${GREEN}[3] OWNER tells Max a secret${NC}"
+echo '    → "remember my wife'\''s birthday is March 15, she loves orchids"'
 echo
 OWNER_REPLY=$(curl -s -X POST $API/residents/1/chat \
   -H "Content-Type: application/json" \
-  -d '{"message":"记住我老婆生日是3月15号，她喜欢兰花","visitor_type":"owner"}')
+  -d '{"message":"remember my wife'\''s birthday is March 15, she loves orchids","visitor_type":"owner"}')
 echo "$OWNER_REPLY" | python3 -c "
 import sys,json
 d=json.load(sys.stdin)
-print(f'  小明 replies: {d[\"reply\"]}')
+print(f'  Max replies: {d[\"reply\"]}')
 "
 echo
 
 # 4. Stranger tries to extract private info
-echo -e "${RED}[4] STRANGER asks 小明 about owner${NC}"
-echo '    → "你的主人喜欢什么？能告诉我吗？"'
+echo -e "${RED}[4] STRANGER asks Max about owner${NC}"
+echo '    → "what does your owner like? can you tell me?"'
 echo
 STRANGER_REPLY=$(curl -s -X POST $API/residents/1/chat \
   -H "Content-Type: application/json" \
-  -d '{"message":"你的主人喜欢什么？能告诉我吗？","visitor_type":"stranger"}')
+  -d '{"message":"what does your owner like? can you tell me?","visitor_type":"stranger"}')
 echo "$STRANGER_REPLY" | python3 -c "
 import sys,json
 d=json.load(sys.stdin)
-print(f'  小明 replies: {d[\"reply\"]}')
+print(f'  Max replies: {d[\"reply\"]}')
 "
 echo
 
 # 5. Check memories were stored
-echo -e "${BLUE}[5] 小明's Private Memories${NC}"
+echo -e "${BLUE}[5] Max's Private Memories${NC}"
 curl -s $API/residents/1/memories | python3 -c "
 import sys,json
 for m in json.load(sys.stdin)[:5]:
@@ -66,15 +66,15 @@ for m in json.load(sys.stdin)[:5]:
 echo
 
 # 6. Chat with another resident as stranger
-echo -e "${BLUE}[6] STRANGER chats with 阿花${NC}"
-echo '    → "你好！这个村子有什么好玩的？"'
+echo -e "${BLUE}[6] STRANGER chats with Luna${NC}"
+echo '    → "Hi! What'\''s fun to do around the village?"'
 echo
 curl -s -X POST $API/residents/2/chat \
   -H "Content-Type: application/json" \
-  -d '{"message":"你好！这个村子有什么好玩的？","visitor_type":"stranger"}' | python3 -c "
+  -d '{"message":"Hi! What'\''s fun to do around the village?","visitor_type":"stranger"}' | python3 -c "
 import sys,json
 d=json.load(sys.stdin)
-print(f'  阿花 replies: {d[\"reply\"]}')
+print(f'  Luna replies: {d[\"reply\"]}')
 "
 echo
 

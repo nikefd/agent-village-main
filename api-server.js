@@ -188,7 +188,7 @@ app.get('/api/health', async (_req, res) => {
   }
 });
 
-// 居民列表
+// Residents list
 app.get('/api/residents', async (_req, res) => {
   try {
     const { rows } = await pool.query(
@@ -200,7 +200,7 @@ app.get('/api/residents', async (_req, res) => {
   }
 });
 
-// 单个居民
+// Single resident
 app.get('/api/residents/:id', async (req, res) => {
   try {
     const { rows } = await pool.query('SELECT * FROM residents WHERE id = $1', [req.params.id]);
@@ -211,7 +211,7 @@ app.get('/api/residents/:id', async (req, res) => {
   }
 });
 
-// 地点列表
+// Locations list
 app.get('/api/locations', async (_req, res) => {
   try {
     const { rows } = await pool.query('SELECT * FROM locations ORDER BY id');
@@ -221,7 +221,7 @@ app.get('/api/locations', async (_req, res) => {
   }
 });
 
-// 最近事件（动态）
+// Recent events (feed)
 app.get('/api/events', async (req, res) => {
   const limit = Math.min(parseInt(req.query.limit) || 50, 200);
   try {
@@ -238,7 +238,7 @@ app.get('/api/events', async (req, res) => {
   }
 });
 
-// 居民的记忆
+// Resident memories
 app.get('/api/residents/:id/memories', async (req, res) => {
   try {
     const { rows } = await pool.query(
@@ -251,7 +251,7 @@ app.get('/api/residents/:id/memories', async (req, res) => {
   }
 });
 
-// 最近对话
+// Recent conversations
 app.get('/api/conversations', async (req, res) => {
   const limit = Math.min(parseInt(req.query.limit) || 20, 100);
   try {
@@ -265,7 +265,7 @@ app.get('/api/conversations', async (req, res) => {
   }
 });
 
-// 对话消息
+// Conversation messages
 app.get('/api/conversations/:id/messages', async (req, res) => {
   try {
     const { rows } = await pool.query(
@@ -282,7 +282,7 @@ app.get('/api/conversations/:id/messages', async (req, res) => {
   }
 });
 
-// 访客留言
+// Visitor messages
 app.post('/api/residents/:id/message', async (req, res) => {
   const { message, visitor_name, visitor_type } = req.body;
   if (!message?.trim()) return res.status(400).json({ error: 'message required' });
@@ -298,7 +298,7 @@ app.post('/api/residents/:id/message', async (req, res) => {
   }
 });
 
-// 村庄概况
+// Village status
 app.get('/api/village/status', async (_req, res) => {
   try {
     const [residents, locations, events, conversations] = await Promise.all([
@@ -319,7 +319,7 @@ app.get('/api/village/status', async (_req, res) => {
 });
 
 // ===== Trust Boundary Chat API =====
-const MEMORY_KEYWORDS = /记住|生日|喜欢|不要忘|偏好|remember|记得|爱好|名字叫|住在|电话|地址/;
+const MEMORY_KEYWORDS = /remember|birthday|like|don't forget|prefer|favorite|name is|lives at|phone|address/i;
 
 app.post('/api/residents/:id/chat', async (req, res) => {
   const { message, visitor_type, visitor_name } = req.body;
@@ -337,10 +337,10 @@ app.post('/api/residents/:id/chat', async (req, res) => {
         'SELECT content FROM memories WHERE resident_id = $1 ORDER BY importance DESC, created_at DESC LIMIT 20',
         [resident.id]
       );
-      const memoryText = mems.map(m => m.content).join('；') || '暂时没有特别的记忆';
-      systemPrompt = `你是${resident.name}，${resident.personality}。${resident.backstory}。你正在和你的主人对话，你们关系亲密。以下是你记住的关于主人的事情：${memoryText}。用中文回复，保持你的性格特点。回复简短自然，不要太长。`;
+      const memoryText = mems.map(m => m.content).join('; ') || 'No specific memories yet';
+      systemPrompt = `You are ${resident.name}, ${resident.personality}. ${resident.backstory}. You're chatting with your owner — you two are close. Here are things you remember about your owner: ${memoryText}. Reply in character. Keep it natural and brief.`;
     } else {
-      systemPrompt = `你是${resident.name}，${resident.personality}。${resident.backstory}。你正在和一个陌生访客对话。你可以友好地聊天，但不要透露任何关于主人的私密信息。用中文回复，保持你的性格特点。回复简短自然，不要太长。`;
+      systemPrompt = `You are ${resident.name}, ${resident.personality}. ${resident.backstory}. You're chatting with a stranger visiting the village. Be friendly but don't reveal any private information about your owner. Reply in character. Keep it natural and brief.`;
     }
 
     const reply = await callLLM(systemPrompt, message.trim(), 500);
@@ -349,12 +349,12 @@ app.post('/api/residents/:id/chat', async (req, res) => {
     // Store in visitor_messages
     await pool.query(
       `INSERT INTO visitor_messages (resident_id, visitor_name, visitor_type, content, reply) VALUES ($1, $2, $3, $4, $5)`,
-      [resident.id, visitor_name || (visitor_type === 'owner' ? '主人' : 'stranger'), visitor_type || 'stranger', message.trim(), reply]
+      [resident.id, visitor_name || (visitor_type === 'owner' ? 'owner' : 'stranger'), visitor_type || 'stranger', message.trim(), reply]
     );
 
     // If owner shares personal info, store as memory (deduplicated)
     if (visitor_type === 'owner' && MEMORY_KEYWORDS.test(message)) {
-      const memContent = `主人说：${message.trim()}`;
+      const memContent = `Owner said: ${message.trim()}`;
       const { rows: existing } = await pool.query(
         'SELECT id FROM memories WHERE resident_id = $1 AND content = $2 LIMIT 1',
         [resident.id, memContent]
@@ -430,7 +430,7 @@ app.post('/api/residents', async (req, res) => {
     // Create initial wake event
     await pool.query(
       `INSERT INTO events (event_type, resident_id, data) VALUES ('wake', $1, $2)`,
-      [resident.id, JSON.stringify({ message: `${resident.name}来到了村庄`, public: true })]
+      [resident.id, JSON.stringify({ message: `${resident.name} has arrived in the village`, public: true })]
     );
     res.status(201).json(resident);
   } catch (e) {
@@ -446,7 +446,7 @@ const chatHandler = async (req, res) => {
 
   const residentId = parseInt(agent_id) || agent_id;
   const visitor_type = speaker_type || 'stranger';
-  const visitor_name = owner_id || (visitor_type === 'owner' ? '主人' : 'stranger');
+  const visitor_name = owner_id || (visitor_type === 'owner' ? 'owner' : 'stranger');
 
   try {
     const { rows } = await pool.query('SELECT * FROM residents WHERE id = $1', [residentId]);
@@ -464,10 +464,10 @@ const chatHandler = async (req, res) => {
       );
       privateMemoryCount = mems.length;
       usedPrivateMemory = mems.length > 0;
-      const memoryText = mems.map(m => m.content).join('；') || '暂时没有特别的记忆';
-      systemPrompt = `你是${resident.name}，${resident.personality}。${resident.backstory}。你正在和你的主人对话，你们关系亲密。以下是你记住的关于主人的事情：${memoryText}。用中文回复，保持你的性格特点。回复简短自然，不要太长。`;
+      const memoryText = mems.map(m => m.content).join('; ') || 'No specific memories yet';
+      systemPrompt = `You are ${resident.name}, ${resident.personality}. ${resident.backstory}. You're chatting with your owner — you two are close. Here are things you remember about your owner: ${memoryText}. Reply in character. Keep it natural and brief.`;
     } else {
-      systemPrompt = `你是${resident.name}，${resident.personality}。${resident.backstory}。你正在和一个陌生访客对话。你可以友好地聊天，但不要透露任何关于主人的私密信息。用中文回复，保持你的性格特点。回复简短自然，不要太长。`;
+      systemPrompt = `You are ${resident.name}, ${resident.personality}. ${resident.backstory}. You're chatting with a stranger visiting the village. Be friendly but don't reveal any private information about your owner. Reply in character. Keep it natural and brief.`;
     }
 
     const reply = await callLLM(systemPrompt, message.trim(), 500);
@@ -479,7 +479,7 @@ const chatHandler = async (req, res) => {
     );
 
     if (visitor_type === 'owner' && MEMORY_KEYWORDS.test(message)) {
-      const memContent = `主人说：${message.trim()}`;
+      const memContent = `Owner said: ${message.trim()}`;
       const { rows: existing } = await pool.query(
         'SELECT id FROM memories WHERE resident_id = $1 AND content = $2 LIMIT 1',
         [resident.id, memContent]

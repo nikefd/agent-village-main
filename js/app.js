@@ -78,7 +78,7 @@ function renderTicker(items) {
       <span class="t-time">${shortTime(item.created_at)}</span>
       <span class="t-emoji">${item.resident_avatar || '📋'}</span>
       <span class="t-name">${esc(item.resident_name || 'Someone')}</span>
-      <span class="t-action">${esc(item.description || item.event_type || '')}</span>
+      <span class="t-action">${esc(item.data?.message || item.description || item.event_type || '')}</span>
     </div>`;
   }).join('');
   track.innerHTML = html + html; // duplicate for seamless scroll
@@ -102,6 +102,10 @@ function renderUpdatesTab() {
       ? `<div class="rui-avatar-placeholder" style="font-size:20px">${item.resident_avatar}</div>`
       : `<div class="rui-avatar-placeholder" style="background:${color}22;color:${color}">${initial}</div>`;
 
+    const msgText = item.event_type === 'talk' && item.data?.dialogue
+      ? item.data.dialogue
+      : item.data?.message || item.description || item.event_type || '';
+
     return `<div class="room-update-item">
       <div class="rui-icon-col">
         ${avatarHtml}
@@ -113,7 +117,7 @@ function renderUpdatesTab() {
           <span class="rui-time">· ${timeAgo(item.created_at)}</span>
           <span class="rui-type">${esc(item.event_type || '')}</span>
         </div>
-        <div class="rui-text">${esc(item.description || '')}</div>
+        <div class="rui-text" style="white-space:pre-line">${esc(msgText)}</div>
       </div>
     </div>`;
   }).join('');
@@ -153,7 +157,7 @@ async function renderHomeTab() {
     if (myEvents.length) {
       feedEl.innerHTML = myEvents.map(ev => `<div class="home-feed-item">
         <span class="home-feed-time">${timeAgo(ev.created_at)}</span>
-        <span class="home-feed-text">${esc(ev.description || ev.event_type)}</span>
+        <span class="home-feed-text">${esc(ev.data?.message || ev.description || ev.event_type)}</span>
       </div>`).join('');
     } else {
       feedEl.innerHTML = '<div style="padding:20px;text-align:center;color:rgba(255,255,255,0.3);font-size:13px">No activity yet</div>';
@@ -196,7 +200,7 @@ function renderActivityTab() {
         <div class="activity-avatar-placeholder">${avatar}</div>
       </div>
       <div class="activity-body">
-        <div class="activity-text"><strong>${esc(name)}</strong> ${esc(ev.description || ev.event_type || '')}</div>
+        <div class="activity-text"><strong>${esc(name)}</strong> ${esc(ev.data?.message || ev.description || ev.event_type || '')}</div>
         <div class="activity-time">${timeAgo(ev.created_at)}</div>
       </div>
     </div>`;
@@ -259,7 +263,7 @@ async function openRoom(resident) {
             <span class="rui-time">${timeAgo(ev.created_at)}</span>
             <span class="rui-type">${esc(ev.event_type || '')}</span>
           </div>
-          <div class="rui-text">${esc(ev.description || '')}</div>
+          <div class="rui-text">${esc((ev.data?.message || ev.description || ''))}</div>
         </div>
       </div>`).join('');
     } else {

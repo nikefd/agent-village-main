@@ -20,20 +20,20 @@ function getTimePeriod() {
 
 // Personality-driven location preferences (multiple options per period for variety)
 const LOCATION_PREFS = {
-  '小明': { morning: ['cafe','library'], afternoon: ['library','park'], evening: ['cafe','home_district'], lunch: ['village_square','cafe'], dawn: ['home_district','cafe'] },
-  '阿花': { morning: ['village_square','park'], afternoon: ['park','cafe'], evening: ['village_square','cafe'], lunch: ['village_square','cafe'], dawn: ['home_district','village_square'] },
-  '老王': { morning: ['library','park'], afternoon: ['library','cafe'], evening: ['home_district','village_square'], lunch: ['cafe','village_square'], dawn: ['library','home_district'] },
-  '铁柱': { morning: ['workshop','village_square'], afternoon: ['workshop','park'], evening: ['village_square','cafe'], lunch: ['village_square','cafe'], dawn: ['workshop','home_district'] },
-  '小美': { morning: ['park','cafe'], afternoon: ['cafe','library'], evening: ['park','home_district'], lunch: ['village_square','park'], dawn: ['park','home_district'] },
+  'Max': { morning: ['cafe','library'], afternoon: ['library','park'], evening: ['cafe','home_district'], lunch: ['village_square','cafe'], dawn: ['home_district','cafe'] },
+  'Luna': { morning: ['village_square','park'], afternoon: ['park','cafe'], evening: ['village_square','cafe'], lunch: ['village_square','cafe'], dawn: ['home_district','village_square'] },
+  'Arthur': { morning: ['library','park'], afternoon: ['library','cafe'], evening: ['home_district','village_square'], lunch: ['cafe','village_square'], dawn: ['library','home_district'] },
+  'Rusty': { morning: ['workshop','village_square'], afternoon: ['workshop','park'], evening: ['village_square','cafe'], lunch: ['village_square','cafe'], dawn: ['workshop','home_district'] },
+  'Iris': { morning: ['park','cafe'], afternoon: ['cafe','library'], evening: ['park','home_district'], lunch: ['village_square','park'], dawn: ['park','home_district'] },
 };
 
 // Personality action weights: [diary, move, mood, talk]
 const ACTION_WEIGHTS = {
-  '小明': [0.15, 0.35, 0.1, 0.3],
-  '阿花': [0.1, 0.3, 0.1, 0.45],
-  '老王': [0.25, 0.3, 0.1, 0.2],
-  '铁柱': [0.1, 0.3, 0.15, 0.35],
-  '小美': [0.2, 0.35, 0.15, 0.2],
+  'Max': [0.15, 0.35, 0.1, 0.3],
+  'Luna': [0.1, 0.3, 0.1, 0.45],
+  'Arthur': [0.25, 0.3, 0.1, 0.2],
+  'Rusty': [0.1, 0.3, 0.15, 0.35],
+  'Iris': [0.2, 0.35, 0.15, 0.2],
 };
 
 async function callLLM(systemPrompt, userMessage, maxTokens = 300) {
@@ -60,16 +60,16 @@ async function callLLM(systemPrompt, userMessage, maxTokens = 300) {
 
 async function writeDiary(pool, resident) {
   const period = getTimePeriod();
-  const periodCN = { dawn: '清晨', morning: '上午', lunch: '午间', afternoon: '下午', evening: '傍晚', night: '夜晚' }[period];
+  const periodEN = { dawn: 'dawn', morning: 'morning', lunch: 'lunchtime', afternoon: 'afternoon', evening: 'evening', night: 'night' }[period];
   
   // Get recent events for context
   const { rows: recentEvents } = await pool.query(
     `SELECT data->>'message' as msg FROM events WHERE resident_id = $1 ORDER BY created_at DESC LIMIT 5`,
     [resident.id]
   );
-  const context = recentEvents.map(e => e.msg).filter(Boolean).join('；');
+  const context = recentEvents.map(e => e.msg).filter(Boolean).join('; ');
 
-  const sys = `你是${resident.name}，${resident.personality}。你正在写日记。用一两句话记录你的想法或感受，体现你的性格。不要太长。不要重复之前写过的内容。`;
+  const sys = `You are ${resident.name}, ${resident.personality}. Write a short diary entry reflecting your thoughts. Stay in character. Keep it 1-3 sentences. Don't repeat previous entries.`;
   
   // Include recent diary entries to avoid repetition
   const { rows: recentDiaries } = await pool.query(
@@ -77,9 +77,9 @@ async function writeDiary(pool, resident) {
     [resident.id]
   );
   const prevDiaries = recentDiaries.map(d => d.msg).filter(Boolean);
-  const avoidRepeat = prevDiaries.length ? `\n\n你最近已经写过这些日记，请写不同的内容：\n${prevDiaries.map(d => '- ' + d.slice(0, 60)).join('\n')}` : '';
+  const avoidRepeat = prevDiaries.length ? `\n\nYou recently wrote these diaries, please write something different:\n${prevDiaries.map(d => '- ' + d.slice(0, 60)).join('\n')}` : '';
   
-  const prompt = `现在是${periodCN}，你在${resident.location}。${context ? '最近发生的事：' + context : ''}请写一段简短的日记。${avoidRepeat}`;
+  const prompt = `It's ${periodEN}, you're at ${resident.location}. ${context ? 'Recent happenings: ' + context : ''}Write a short diary entry.${avoidRepeat}`;
 
   const entry = await callLLM(sys, prompt, 200);
   if (!entry) return;
@@ -101,8 +101,8 @@ async function moveLocation(pool, resident) {
   const preferred = candidates[Math.floor(Math.random() * candidates.length)];
 
   const locationLabels = {
-    village_square: '村广场', cafe: '咖啡馆', library: '图书馆',
-    park: '公园', workshop: '工坊', home_district: '居民区'
+    village_square: 'Village Square', cafe: 'The Café', library: 'The Library',
+    park: 'The Park', workshop: 'The Workshop', home_district: 'Residential Area'
   };
   const fromLabel = locationLabels[resident.location] || resident.location;
   const toLabel = locationLabels[preferred] || preferred;
@@ -110,7 +110,7 @@ async function moveLocation(pool, resident) {
   await pool.query(`UPDATE residents SET location = $1 WHERE id = $2`, [preferred, resident.id]);
   await pool.query(
     `INSERT INTO events (event_type, resident_id, data) VALUES ('move', $1, $2)`,
-    [resident.id, JSON.stringify({ message: `${resident.name}从${fromLabel}走到了${toLabel}`, from: resident.location, to: preferred, public: true })]
+    [resident.id, JSON.stringify({ message: `${resident.name} walked from ${fromLabel} to ${toLabel}`, from: resident.location, to: preferred, public: true })]
   );
   resident.location = preferred;
   console.log(`🚶 ${resident.name} moved ${fromLabel} → ${toLabel}`);
@@ -124,7 +124,7 @@ async function changeMood(pool, resident) {
   await pool.query(`UPDATE residents SET mood = $1 WHERE id = $2`, [newMood, resident.id]);
   await pool.query(
     `INSERT INTO events (event_type, resident_id, data) VALUES ('mood_change', $1, $2)`,
-    [resident.id, JSON.stringify({ message: `${resident.name}的心情变成了${newMood}`, from: resident.mood, to: newMood, public: true })]
+    [resident.id, JSON.stringify({ message: `${resident.name}'s mood changed to ${newMood}`, from: resident.mood, to: newMood, public: true })]
   );
   resident.mood = newMood;
   console.log(`😊 ${resident.name} mood → ${newMood}`);
@@ -140,13 +140,13 @@ async function talkToNeighbor(pool, resident, allResidents) {
     const target = awake[Math.floor(Math.random() * awake.length)];
     // Move to their location
     const locationLabels = {
-      village_square: '村广场', cafe: '咖啡馆', library: '图书馆',
-      park: '公园', workshop: '工坊', home_district: '居民区'
+      village_square: 'Village Square', cafe: 'The Café', library: 'The Library',
+      park: 'The Park', workshop: 'The Workshop', home_district: 'Residential Area'
     };
     await pool.query(`UPDATE residents SET location = $1 WHERE id = $2`, [target.location, resident.id]);
     await pool.query(
       `INSERT INTO events (event_type, resident_id, data) VALUES ('move', $1, $2)`,
-      [resident.id, JSON.stringify({ message: `${resident.name}去${locationLabels[target.location] || target.location}找${target.name}`, from: resident.location, to: target.location, public: true })]
+      [resident.id, JSON.stringify({ message: `${resident.name} went to ${locationLabels[target.location] || target.location} to find ${target.name}`, from: resident.location, to: target.location, public: true })]
     );
     console.log(`🚶 ${resident.name} went to find ${target.name} at ${target.location}`);
     resident.location = target.location;
@@ -154,9 +154,9 @@ async function talkToNeighbor(pool, resident, allResidents) {
   }
 
   const other = neighbors[Math.floor(Math.random() * neighbors.length)];
-  const sys = `你是${resident.name}，${resident.personality}。你在${resident.location}遇到了${other.name}（${other.personality}）。生成一段两人的简短对话（2-4句），格式：\n${resident.name}：...\n${other.name}：...\n用中文，体现双方性格。`;
+  const sys = `You are ${resident.name}, ${resident.personality}. You meet ${other.name} (${other.personality}) at ${resident.location}. Generate a short 2-4 line dialogue. Format:\n${resident.name}: ...\n${other.name}: ...\nStay in character for both.`;
 
-  const dialogue = await callLLM(sys, '请生成对话', 300);
+  const dialogue = await callLLM(sys, 'Generate a dialogue.', 300);
   if (!dialogue) return;
 
   // Create conversation
@@ -169,7 +169,7 @@ async function talkToNeighbor(pool, resident, allResidents) {
   // Store as event
   await pool.query(
     `INSERT INTO events (event_type, resident_id, data) VALUES ('talk', $1, $2)`,
-    [resident.id, JSON.stringify({ message: `${resident.name}和${other.name}在${resident.location}聊天了`, dialogue, public: true })]
+    [resident.id, JSON.stringify({ message: `${resident.name} and ${other.name} chatted at ${resident.location}`, dialogue, public: true })]
   );
 
   // End conversation with summary
@@ -190,7 +190,7 @@ async function maybeTakeAction(pool, resident, allResidents) {
       await pool.query(`UPDATE residents SET status = 'sleeping' WHERE id = $1`, [resident.id]);
       await pool.query(
         `INSERT INTO events (event_type, resident_id, data) VALUES ('sleep', $1, $2)`,
-        [resident.id, JSON.stringify({ message: `${resident.name}睡觉了`, public: true })]
+        [resident.id, JSON.stringify({ message: `${resident.name} went to sleep`, public: true })]
       );
       resident.status = 'sleeping';
     }
@@ -201,7 +201,7 @@ async function maybeTakeAction(pool, resident, allResidents) {
     await pool.query(`UPDATE residents SET status = 'idle', energy = LEAST(energy + 30, 100) WHERE id = $1`, [resident.id]);
     await pool.query(
       `INSERT INTO events (event_type, resident_id, data) VALUES ('wake', $1, $2)`,
-      [resident.id, JSON.stringify({ message: `${resident.name}醒来了`, public: true })]
+      [resident.id, JSON.stringify({ message: `${resident.name} woke up`, public: true })]
     );
     resident.status = 'idle';
     return;

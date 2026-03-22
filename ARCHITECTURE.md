@@ -51,14 +51,14 @@ events (public)             → shared feed, never contains private data
 
 ### Key Safeguard
 
-The LLM system prompt for stranger mode explicitly instructs: "不要透露任何关于主人的私密信息" (do not reveal any private information about the owner). Private memories are never loaded into the stranger context — they're architecturally excluded, not just prompt-filtered.
+The LLM system prompt for stranger mode explicitly instructs: "Don't reveal any private information about your owner." Private memories are never loaded into the stranger context — they're architecturally excluded, not just prompt-filtered.
 
 **Example flow:**
-1. Owner tells 小明: "我老婆生日是3月15号，她喜欢兰花"
-2. System detects keywords (生日/喜欢), stores in `memories` with importance=7
-3. Stranger asks 小明: "你主人喜欢什么？"
-4. Stranger prompt has NO access to memories → 小明 deflects naturally
-5. 小明's diary might later say "想到了人们用花表达心意" — personality leaks through, private data doesn't
+1. Owner tells Max: "my wife's birthday is March 15, she loves orchids"
+2. System detects keywords (birthday/like), stores in `memories` with importance=7
+3. Stranger asks Max: "what does your owner like?"
+4. Stranger prompt has NO access to memories → Max deflects naturally
+5. Max's diary might later say "thinking about how people express care through small gestures" — personality leaks through, private data doesn't
 
 ---
 
