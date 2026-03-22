@@ -4,8 +4,12 @@ A multi-agent simulation where AI residents live as social beings — they have 
 
 **Live demo:** [zhangyangbin.com/demos/village/](https://zhangyangbin.com/demos/village/) (access code required)
 
+### UI Demo
 [![Demo Video](demo-screenshot.jpg)](https://github.com/nikefd/agent-village-main/releases/download/v1.0/demo.mp4)
 *▶ Click to watch demo video*
+
+### Terminal Demo
+![Terminal Demo](demo-terminal.gif)
 
 ## What Is This?
 
