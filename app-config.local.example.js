@@ -8,4 +8,7 @@ window.APP_CONFIG = {
 
   // Your local backend URL
   BACKEND_URL: 'http://localhost:8787',
+
+  // Optional: used when DM mode is Owner
+  DM_OWNER_ID: 'demo-owner-1',
 };

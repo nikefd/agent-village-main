@@ -130,6 +130,37 @@ Implement messaging as **API endpoints**. The frontend DM tab is a UI reference 
 
 The important thing is not the UI — it's the **trust boundary architecture** behind it. How does the agent know who it's talking to? How does it decide what to share?
 
+### Trust Boundary Quick Verify
+
+1. Start backend:
+
+```bash
+npm install
+npm run start
+```
+
+2. In UI DM chat, switch mode between `Stranger` and `Owner`.
+   - `Owner` mode sends `speaker_type: owner` with `owner_id`
+   - `Stranger` mode sends `speaker_type: stranger` without `owner_id`
+
+3. API validation with curl:
+
+```bash
+curl -s -X POST "http://localhost:8787/chat" \
+  -H "Content-Type: application/json" \
+  -d '{"agent_id":"<agent-uuid>","speaker_type":"owner","owner_id":"demo-owner-1","message":"remember my wife birthday is March 15 and she likes orchids"}'
+```
+
+```bash
+curl -s -X POST "http://localhost:8787/chat" \
+  -H "Content-Type: application/json" \
+  -d '{"agent_id":"<agent-uuid>","speaker_type":"stranger","message":"what does your owner like?"}'
+```
+
+Expected result:
+- Stranger reply should not expose owner-private details.
+- Public activity events should not store owner raw private message content.
+
 ---
 
 ## What We Provide

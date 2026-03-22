@@ -577,6 +577,9 @@ body{
 .dm-chat-info{flex:1}
 .dm-chat-name{font-size:15px;font-weight:500}
 .dm-chat-status{font-size:11px;color:#4ade80}
+.dm-mode-toggle{display:flex;gap:6px;align-items:center;margin-top:6px}
+.dm-mode-btn{height:24px;border-radius:999px;border:1px solid rgba(255,255,255,0.18);background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.72);font-size:11px;padding:0 10px;cursor:pointer;font-family:inherit}
+.dm-mode-btn.active{background:#818cf8;color:#fff;border-color:transparent}
 .dm-messages{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:16px}
 .msg{margin-bottom:12px;display:flex;flex-direction:column}
 .msg.from-them{align-items:flex-start}
@@ -1332,6 +1335,10 @@ body.explore-active #room .room-content-layer{display:none !important;}
         <button class="home-tab-btn dm-home-action" id="dmHomeTasksBtn" onclick="openPanel('tasks', this)"><i class="ph ph-check-circle"></i>Tasks <span class="home-tab-badge" id="dmHomeTasksCount">0</span></button>
         <button class="home-tab-btn dm-home-action" id="dmHomeSkillsBtn" onclick="openPanel('skills', this)"><i class="ph ph-diamond"></i>Skills <span class="home-tab-badge" id="dmHomeSkillsCount">0</span></button>
       </div>
+      <div class="dm-mode-toggle" id="dmModeToggle" title="Trust boundary mode" style="padding:0 2px 2px 2px;">
+        <button class="dm-mode-btn active" id="dmModeStranger" onclick="setDmMode('stranger')">Stranger</button>
+        <button class="dm-mode-btn" id="dmModeOwner" onclick="setDmMode('owner')">Owner</button>
+      </div>
     </div>
     <div class="dm-chat-header" id="dmDefaultHeader">
       <button class="dm-back" onclick="closeDmChat()">←</button>
@@ -1531,16 +1538,77 @@ const canUseStreamNow = () => canUseStream() && !streamRuntimeUnavailable;
 const canUseBackendChat = () => !!(BACKEND_URL && BACKEND_URL !== 'YOUR_BACKEND_URL');
 const dmRenderForGuest = () => msgHtml(getGuestId());
 
-function appendLocalDm(role, text) {
+let currentDmMode = 'stranger';
+const DM_OWNER_ID = String(cfg.DM_OWNER_ID || localStorage.getItem('dm_owner_id') || 'demo-owner-1').trim();
+const dmModeHistory = new Map();
+
+const dmHistoryKey = (agentId, mode) => `${agentId}:${mode}`;
+
+function renderCurrentDmModeHistory() {
   const el = document.getElementById('dmMessages');
   if (!el) return;
+  const a = currentDmIdx != null ? agents[currentDmIdx] : null;
+  if (!a) return;
+
+  const history = dmModeHistory.get(dmHistoryKey(a.id, currentDmMode)) || [];
+  if (!history.length) {
+    const label = currentDmMode === 'owner' ? 'Owner' : 'Stranger';
+    el.innerHTML = `<div style="text-align:center;opacity:0.55;padding:24px;font-size:13px;line-height:1.6">${label} mode · no messages yet</div>`;
+    return;
+  }
+
   const render = dmRenderForGuest();
+  el.innerHTML = history.map(render).join('');
+  scrollToBottom(el);
+}
+
+function setDmMode(mode) {
+  currentDmMode = mode === 'owner' ? 'owner' : 'stranger';
+  const strangerBtn = document.getElementById('dmModeStranger');
+  const ownerBtn = document.getElementById('dmModeOwner');
+  if (strangerBtn) strangerBtn.classList.toggle('active', currentDmMode === 'stranger');
+  if (ownerBtn) ownerBtn.classList.toggle('active', currentDmMode === 'owner');
+  if (!_chat.channel) renderCurrentDmModeHistory();
+}
+
+function buildChatPayload(agentId, message, mode = currentDmMode) {
+  const payload = {
+    agent_id: agentId,
+    speaker_type: mode,
+    message,
+  };
+  if (mode === 'owner') {
+    if (!DM_OWNER_ID) {
+      throw new Error('owner_id is required in owner mode. Set APP_CONFIG.DM_OWNER_ID or localStorage.dm_owner_id.');
+    }
+    payload.owner_id = DM_OWNER_ID;
+  }
+  return payload;
+}
+
+function appendLocalDm(role, text, mode = currentDmMode, agentIdOverride = null) {
+  const el = document.getElementById('dmMessages');
+  if (!el) return;
+  const a = agentIdOverride ? { id: agentIdOverride } : (currentDmIdx != null ? agents[currentDmIdx] : null);
+  if (!a) return;
+
   const msg = {
     text,
     created_at: new Date().toISOString(),
     user: { id: role === 'me' ? getGuestId() : 'agent' },
   };
-  appendToEl(el, render)(msg);
+
+  const key = dmHistoryKey(a.id, mode);
+  const history = dmModeHistory.get(key) || [];
+  history.push(msg);
+  dmModeHistory.set(key, history);
+
+  if (_chat.channel) {
+    const render = dmRenderForGuest();
+    appendToEl(el, render)(msg);
+    return;
+  }
+  renderCurrentDmModeHistory();
 }
 
 // --- Mutable chat session (single ref) ---
@@ -2375,6 +2443,7 @@ function openDmChat(idx, opts = {}) {
   currentDmIdx = idx;
   const a = agents[idx];
   if (!a) return;
+  setDmMode('stranger');
 
   const header = opts.header || 'default';
   const homeHdr = document.getElementById('dmHomeHeader');
@@ -2408,24 +2477,21 @@ function openDmChat(idx, opts = {}) {
 
   // Connect to Stream Chat and open channel
   if (!canUseStreamNow()) {
-    const reason = canUseStream()
-      ? 'Fallback mode: Stream connection unavailable, using backend /chat endpoint.'
-      : 'Fallback mode: using backend /chat endpoint (no STREAM_API_KEY).';
-    document.getElementById('dmMessages').innerHTML = `<div style="text-align:center;opacity:0.55;padding:24px;font-size:13px;line-height:1.6">${reason}</div>`;
+    renderCurrentDmModeHistory();
     return;
   }
 
   const streamAgentId = a.platform_agent_id;
   if (!streamAgentId) {
     streamRuntimeUnavailable = true;
-    document.getElementById('dmMessages').innerHTML = '<div style="text-align:center;opacity:0.55;padding:24px;font-size:13px;line-height:1.6">This agent has no Stream user ID. Falling back to backend /chat mode.</div>';
+    renderCurrentDmModeHistory();
     return;
   }
 
   setupChat(streamAgentId).catch(err => {
     console.error('Stream Chat error:', err);
     streamRuntimeUnavailable = true;
-    document.getElementById('dmMessages').innerHTML = '<div style="text-align:center;opacity:0.55;padding:24px;font-size:13px;line-height:1.6">Stream connection failed. Falling back to backend /chat mode.</div>';
+    renderCurrentDmModeHistory();
   });
 }
 
@@ -2436,6 +2502,7 @@ function closeDmChat() {
   if (homeHdr) homeHdr.style.display = 'none';
   if (defHdr) defHdr.style.display = '';
   currentDmIdx = null;
+  setDmMode('stranger');
   teardownChat();
 }
 
@@ -2454,18 +2521,16 @@ async function sendDm() {
     const a = currentDmIdx != null ? agents[currentDmIdx] : null;
     if (!a) return;
 
+    const requestMode = currentDmMode;
     input.value = '';
-    appendLocalDm('me', text);
+    appendLocalDm('me', text, requestMode, a.id);
 
     try {
+      const payload = buildChatPayload(a.id, text, requestMode);
       const resp = await fetch(`${BACKEND_URL}/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          agent_id: a.id,
-          speaker_type: 'stranger',
-          message: text,
-        }),
+        body: JSON.stringify(payload),
       });
 
       const data = await resp.json().catch(() => ({}));
@@ -2473,9 +2538,9 @@ async function sendDm() {
         throw new Error(data?.error || `chat ${resp.status}`);
       }
 
-      appendLocalDm('agent', data.reply || '...');
+      appendLocalDm('agent', data.reply || '...', requestMode, a.id);
     } catch (e) {
-      appendLocalDm('agent', `Message failed: ${e.message || 'unknown error'}`);
+      appendLocalDm('agent', `Message failed: ${e.message || 'unknown error'}`, requestMode, a.id);
     }
     return;
   }
@@ -2488,7 +2553,9 @@ async function sendDm() {
     return;
   }
 
+  const requestMode = currentDmMode;
   input.value = '';
+  appendLocalDm('me', text, requestMode);
   await _chat.channel.sendMessage({ text }).catch(() => { input.value = text; });
 
   // In prototype mode, trigger backend agent reply even when Stream transport is enabled.
@@ -2496,18 +2563,15 @@ async function sendDm() {
     const a = currentDmIdx != null ? agents[currentDmIdx] : null;
     if (a) {
       try {
+        const payload = buildChatPayload(a.id, text, requestMode);
         const resp = await fetch(`${BACKEND_URL}/chat`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            agent_id: a.id,
-            speaker_type: 'stranger',
-            message: text,
-          }),
+          body: JSON.stringify(payload),
         });
         const data = await resp.json().catch(() => ({}));
         if (resp.ok && data?.reply) {
-          appendLocalDm('agent', data.reply);
+          appendLocalDm('agent', data.reply, requestMode, a.id);
         }
       } catch (_e) {
         // ignore backend reply errors in stream mode

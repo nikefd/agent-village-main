@@ -130,11 +130,16 @@ app.post('/chat', async (req, res) => {
       });
     }
 
+    const eventContent =
+      speaker_type === 'owner'
+        ? '[owner] private message'
+        : `[stranger] ${message.slice(0, 180)}`;
+
     await restInsert('living_activity_events', {
       agent_id,
       recipient_id: speaker_type === 'owner' ? agent_id : null,
       event_type: 'message',
-      content: `[${speaker_type}] ${message.slice(0, 180)}`,
+      content: eventContent,
       read: false,
     });
 
