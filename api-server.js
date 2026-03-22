@@ -3,6 +3,7 @@
 
 require('dotenv').config();
 const express = require('express');
+const path = require('path');
 const cors = require('cors');
 const { Pool } = require('pg');
 const { callLLM, startScheduler } = require('./behavior-engine');
@@ -19,6 +20,7 @@ const pool = new Pool({
 const app = express();
 app.use(cors());
 app.use(express.json());
+app.use(express.static(path.join(__dirname, '.')));
 
 // ===== PostgREST-compatible layer for frontend =====
 // The frontend uses Supabase REST API style: GET /table?select=*&order=created_at.desc&limit=10&field=eq.value

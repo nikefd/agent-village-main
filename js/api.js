@@ -1,6 +1,6 @@
 // ===== API Layer =====
 const API = {
-  base: APP_CONFIG.API_BASE || '/village/api',
+  base: APP_CONFIG.API_BASE || '/demos/village/api',
 
   async _fetch(path, opts = {}) {
     const url = this.base + path;
@@ -70,6 +70,6 @@ const API = {
   },
 
   async getVillageStatus() {
-    return this._fetch('/village/status');
+    return this._fetch('/demos/village/api/status');
   },
 };

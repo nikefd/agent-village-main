@@ -33,7 +33,14 @@ function closeDmChat() {
 
 function setDmMode(mode) {
   dmMode = mode;
+  dmMessages = [];
   updateModeButtons();
+  // Clear chat and show fresh greeting
+  const msgsEl = document.getElementById('dmMessages');
+  const label = mode === 'owner' ? '🔑 Owner mode' : '🌍 Stranger mode';
+  msgsEl.innerHTML = `<div style="text-align:center;opacity:0.4;padding:24px;font-size:13px">
+    ${label} — ${esc(currentDmResident?.name || 'Agent')}
+  </div>`;
 }
 
 function updateModeButtons() {
@@ -79,7 +86,7 @@ async function sendDm() {
         continue;
       }
       if (typingEl) typingEl.classList.remove('visible');
-      appendMessage('them', '⚠️ 网络中断，请重新发送');
+      appendMessage('them', '⚠️ Connection lost, please try again');
     }
   }
 }
