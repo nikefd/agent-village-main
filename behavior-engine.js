@@ -1,9 +1,25 @@
 // Behavior Engine — proactive agent actions
 const fetch = require('node-fetch');
 
-const LLM_URL = process.env.LLM_URL || 'http://127.0.0.1:18789/v1/chat/completions';
-const LLM_KEY = process.env.LLM_KEY || '';
-const LLM_MODEL = process.env.LLM_MODEL || 'github-copilot/claude-sonnet-4';
+const fs = require('fs');
+const path = require('path');
+
+const LLM_URL = process.env.LLM_URL || 'https://api.githubcopilot.com/chat/completions';
+const LLM_MODEL = process.env.LLM_MODEL || 'claude-sonnet-4';
+const COPILOT_TOKEN_PATH = process.env.COPILOT_TOKEN_PATH || path.join(process.env.HOME || '/home/nikefd', '.openclaw/credentials/github-copilot.token.json');
+
+function getLLMKey() {
+  // If explicit key set, use it
+  if (process.env.LLM_KEY) return process.env.LLM_KEY;
+  // Otherwise read fresh copilot token (it rotates)
+  try {
+    const data = JSON.parse(fs.readFileSync(COPILOT_TOKEN_PATH, 'utf8'));
+    return data.token;
+  } catch (e) {
+    console.error('Failed to read copilot token:', e.message);
+    return '';
+  }
+}
 
 const LOCATIONS = ['village_square', 'cafe', 'library', 'park', 'workshop', 'home_district'];
 
@@ -38,9 +54,19 @@ const ACTION_WEIGHTS = {
 
 async function callLLM(systemPrompt, userMessage, maxTokens = 300) {
   try {
+    const token = getLLMKey();
+    const headers = {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    };
+    // Add Copilot headers if using githubcopilot endpoint
+    if (LLM_URL.includes('githubcopilot.com')) {
+      headers['Editor-Version'] = 'vscode/1.96.0';
+      headers['Copilot-Integration-Id'] = 'vscode-chat';
+    }
     const res = await fetch(LLM_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${LLM_KEY}` },
+      headers,
       body: JSON.stringify({
         model: LLM_MODEL,
         messages: [
@@ -69,7 +95,7 @@ async function writeDiary(pool, resident) {
   );
   const context = recentEvents.map(e => e.msg).filter(Boolean).join('; ');
 
-  const sys = `You are ${resident.name}, ${resident.personality}. Write a short diary entry reflecting your thoughts. Stay in character. Keep it 1-3 sentences. Don't repeat previous entries.`;
+  const sys = `You are ${resident.name}, ${resident.personality}. Write a short diary entry reflecting your thoughts. Stay in character. Keep it 1-3 sentences. Always write in English. Don't repeat previous entries.`;
   
   // Include recent diary entries to avoid repetition
   const { rows: recentDiaries } = await pool.query(
@@ -154,7 +180,7 @@ async function talkToNeighbor(pool, resident, allResidents) {
   }
 
   const other = neighbors[Math.floor(Math.random() * neighbors.length)];
-  const sys = `You are ${resident.name}, ${resident.personality}. You meet ${other.name} (${other.personality}) at ${resident.location}. Generate a short 2-4 line dialogue. Format:\n${resident.name}: ...\n${other.name}: ...\nStay in character for both.`;
+  const sys = `You are ${resident.name}, ${resident.personality}. You meet ${other.name} (${other.personality}) at ${resident.location}. Generate a short 2-4 line dialogue. Format:\n${resident.name}: ...\n${other.name}: ...\nStay in character for both. Always write in English.`;
 
   const dialogue = await callLLM(sys, 'Generate a dialogue.', 300);
   if (!dialogue) return;

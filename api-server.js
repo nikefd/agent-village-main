@@ -338,9 +338,9 @@ app.post('/api/residents/:id/chat', async (req, res) => {
         [resident.id]
       );
       const memoryText = mems.map(m => m.content).join('; ') || 'No specific memories yet';
-      systemPrompt = `You are ${resident.name}, ${resident.personality}. ${resident.backstory}. You're chatting with your owner — you two are close. Here are things you remember about your owner: ${memoryText}. Reply in character. Keep it natural and brief.`;
+      systemPrompt = `You are ${resident.name}, ${resident.personality}. ${resident.backstory}. You're chatting with your owner — you two are close. Here are things you remember about your owner: ${memoryText}. Reply in character. Keep it natural and brief. Always reply in English.`;
     } else {
-      systemPrompt = `You are ${resident.name}, ${resident.personality}. ${resident.backstory}. You're chatting with a stranger visiting the village. Be friendly but don't reveal any private information about your owner. Reply in character. Keep it natural and brief.`;
+      systemPrompt = `You are ${resident.name}, ${resident.personality}. ${resident.backstory}. You're chatting with a stranger visiting the village. Be friendly but don't reveal any private information about your owner. Reply in character. Keep it natural and brief. Always reply in English.`;
     }
 
     const reply = await callLLM(systemPrompt, message.trim(), 500);
@@ -465,9 +465,9 @@ const chatHandler = async (req, res) => {
       privateMemoryCount = mems.length;
       usedPrivateMemory = mems.length > 0;
       const memoryText = mems.map(m => m.content).join('; ') || 'No specific memories yet';
-      systemPrompt = `You are ${resident.name}, ${resident.personality}. ${resident.backstory}. You're chatting with your owner — you two are close. Here are things you remember about your owner: ${memoryText}. Reply in character. Keep it natural and brief.`;
+      systemPrompt = `You are ${resident.name}, ${resident.personality}. ${resident.backstory}. You're chatting with your owner — you two are close. Here are things you remember about your owner: ${memoryText}. Reply in character. Keep it natural and brief. Always reply in English.`;
     } else {
-      systemPrompt = `You are ${resident.name}, ${resident.personality}. ${resident.backstory}. You're chatting with a stranger visiting the village. Be friendly but don't reveal any private information about your owner. Reply in character. Keep it natural and brief.`;
+      systemPrompt = `You are ${resident.name}, ${resident.personality}. ${resident.backstory}. You're chatting with a stranger visiting the village. Be friendly but don't reveal any private information about your owner. Reply in character. Keep it natural and brief. Always reply in English.`;
     }
 
     const reply = await callLLM(systemPrompt, message.trim(), 500);
