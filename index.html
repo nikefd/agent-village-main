@@ -955,11 +955,12 @@ body.explore-active #room .room-content-layer{display:none !important;}
 
 /* ===== TASKS PANEL ===== */
 /* panel = full-screen push navigation */
-.panel-backdrop{display:none}
+.panel-backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:699}
+.panel-backdrop.active{display:block}
 .panel-sheet{
   position:fixed;inset:0;
   background:#0a0a0a;
-  z-index:201;
+  z-index:700;
   opacity:0;
   transform:scale(0.94) translateY(12px);
   transform-origin:center bottom;
@@ -1073,6 +1074,7 @@ body.explore-active #room .room-content-layer{display:none !important;}
 .task-empty-icon{font-size:36px;margin-bottom:12px;opacity:0.4}
 </style>
 <script src="https://unpkg.com/@phosphor-icons/web@2.1.1"></script>
+<script src="./app-config.local.js"></script>
 </head>
 <body>
 
@@ -1410,15 +1412,16 @@ function emojiToIcon(e, size) {
   return `<i class="ph ${cls}"${s}></i>`;
 }
 
-// ===== SUPABASE CONFIG =====
-// Create a free Supabase project at https://supabase.com and paste your credentials here
-const SUPABASE = 'YOUR_SUPABASE_URL/rest/v1';        // e.g. https://xxxxx.supabase.co/rest/v1
-const APIKEY   = 'YOUR_SUPABASE_ANON_KEY';            // publishable anon key from Supabase dashboard
+// ===== SUPABASE/CHAT CONFIG =====
+// Credentials are injected by app-config.local.js (gitignored) at runtime.
+const cfg = window.APP_CONFIG || {};
+const SUPABASE = cfg.SUPABASE || 'YOUR_SUPABASE_URL/rest/v1';
+const APIKEY   = cfg.APIKEY || 'YOUR_SUPABASE_ANON_KEY';
 const H        = { 'apikey': APIKEY, 'Content-Type': 'application/json' };
 
 // ===== STREAM CHAT (optional — chat tab won't work without this) =====
-const STREAM_API_KEY = 'YOUR_STREAM_API_KEY';
-const BACKEND_URL = 'YOUR_BACKEND_URL';
+const STREAM_API_KEY = cfg.STREAM_API_KEY || 'YOUR_STREAM_API_KEY';
+const BACKEND_URL = cfg.BACKEND_URL || 'YOUR_BACKEND_URL';
 
 // --- Pure helpers ---
 
@@ -1522,6 +1525,23 @@ const makeClientFactory = apiKey => {
   };
 };
 const getClient = makeClientFactory(STREAM_API_KEY);
+let streamRuntimeUnavailable = false;
+const canUseStream = () => !!(STREAM_API_KEY && STREAM_API_KEY !== 'YOUR_STREAM_API_KEY');
+const canUseStreamNow = () => canUseStream() && !streamRuntimeUnavailable;
+const canUseBackendChat = () => !!(BACKEND_URL && BACKEND_URL !== 'YOUR_BACKEND_URL');
+const dmRenderForGuest = () => msgHtml(getGuestId());
+
+function appendLocalDm(role, text) {
+  const el = document.getElementById('dmMessages');
+  if (!el) return;
+  const render = dmRenderForGuest();
+  const msg = {
+    text,
+    created_at: new Date().toISOString(),
+    user: { id: role === 'me' ? getGuestId() : 'agent' },
+  };
+  appendToEl(el, render)(msg);
+}
 
 // --- Mutable chat session (single ref) ---
 let _chat = { channel: null, unsubscribe: null };
@@ -2387,10 +2407,25 @@ function openDmChat(idx, opts = {}) {
   document.getElementById('dmChat').classList.add('active');
 
   // Connect to Stream Chat and open channel
-  const streamAgentId = a.platform_agent_id || a.id;
+  if (!canUseStreamNow()) {
+    const reason = canUseStream()
+      ? 'Fallback mode: Stream connection unavailable, using backend /chat endpoint.'
+      : 'Fallback mode: using backend /chat endpoint (no STREAM_API_KEY).';
+    document.getElementById('dmMessages').innerHTML = `<div style="text-align:center;opacity:0.55;padding:24px;font-size:13px;line-height:1.6">${reason}</div>`;
+    return;
+  }
+
+  const streamAgentId = a.platform_agent_id;
+  if (!streamAgentId) {
+    streamRuntimeUnavailable = true;
+    document.getElementById('dmMessages').innerHTML = '<div style="text-align:center;opacity:0.55;padding:24px;font-size:13px;line-height:1.6">This agent has no Stream user ID. Falling back to backend /chat mode.</div>';
+    return;
+  }
+
   setupChat(streamAgentId).catch(err => {
     console.error('Stream Chat error:', err);
-    document.getElementById('dmMessages').innerHTML = '<div style="text-align:center;opacity:0.4;padding:24px;font-size:13px;line-height:1.6">Chat requires a backend &mdash; see README for details</div>';
+    streamRuntimeUnavailable = true;
+    document.getElementById('dmMessages').innerHTML = '<div style="text-align:center;opacity:0.55;padding:24px;font-size:13px;line-height:1.6">Stream connection failed. Falling back to backend /chat mode.</div>';
   });
 }
 
@@ -2407,9 +2442,78 @@ function closeDmChat() {
 async function sendDm() {
   const input = document.getElementById('dmInput');
   const text = input.value.trim();
-  if (!text || !_chat.channel) return;
+  if (!text) return;
+
+  // Fallback mode: Stream unavailable or not configured, use backend /chat API directly.
+  if (!_chat.channel && !canUseStreamNow()) {
+    if (!canUseBackendChat()) {
+      document.getElementById('dmMessages').innerHTML = '<div style="text-align:center;opacity:0.55;padding:24px;font-size:13px;line-height:1.6">Cannot send: BACKEND_URL is not configured.</div>';
+      return;
+    }
+
+    const a = currentDmIdx != null ? agents[currentDmIdx] : null;
+    if (!a) return;
+
+    input.value = '';
+    appendLocalDm('me', text);
+
+    try {
+      const resp = await fetch(`${BACKEND_URL}/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          agent_id: a.id,
+          speaker_type: 'stranger',
+          message: text,
+        }),
+      });
+
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        throw new Error(data?.error || `chat ${resp.status}`);
+      }
+
+      appendLocalDm('agent', data.reply || '...');
+    } catch (e) {
+      appendLocalDm('agent', `Message failed: ${e.message || 'unknown error'}`);
+    }
+    return;
+  }
+
+  if (!_chat.channel) {
+    if (!canUseBackendChat()) {
+      document.getElementById('dmMessages').innerHTML = '<div style="text-align:center;opacity:0.55;padding:24px;font-size:13px;line-height:1.6">Cannot send: BACKEND_URL is not configured.</div>';
+      return;
+    }
+    return;
+  }
+
   input.value = '';
   await _chat.channel.sendMessage({ text }).catch(() => { input.value = text; });
+
+  // In prototype mode, trigger backend agent reply even when Stream transport is enabled.
+  if (canUseBackendChat()) {
+    const a = currentDmIdx != null ? agents[currentDmIdx] : null;
+    if (a) {
+      try {
+        const resp = await fetch(`${BACKEND_URL}/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agent_id: a.id,
+            speaker_type: 'stranger',
+            message: text,
+          }),
+        });
+        const data = await resp.json().catch(() => ({}));
+        if (resp.ok && data?.reply) {
+          appendLocalDm('agent', data.reply);
+        }
+      } catch (_e) {
+        // ignore backend reply errors in stream mode
+      }
+    }
+  }
 }
 
 document.getElementById('dmInput').addEventListener('keydown', e => {
@@ -3020,8 +3124,13 @@ async function openPanel(type, triggerEl) {
   const a = currentAgent || agents[0];
   if (!a) return;
 
-  // Compute transform-origin from trigger button — must be set before .active
   const sheet = document.getElementById('panelSheet');
+  const backdrop = document.getElementById('panelBackdrop');
+  const panelTitle = document.getElementById('panelTitle');
+  const panelContent = document.getElementById('panelContent');
+  if (!sheet || !backdrop || !panelTitle || !panelContent) return;
+
+  // Compute transform-origin from trigger button — must be set before .active
   if (triggerEl) {
     const btn = triggerEl.getBoundingClientRect();
     // Panel is position:fixed, left:50%, margin-left:-215px, top:0
@@ -3034,7 +3143,6 @@ async function openPanel(type, triggerEl) {
     sheet.style.transformOrigin = 'center bottom';
   }
 
-  let html = '';
   const panelTitles = {
     log: 'Task',
     diary: 'Diary',
@@ -3042,11 +3150,24 @@ async function openPanel(type, triggerEl) {
     tasks: 'Tasks',
     memory: 'Memory',
   };
-  document.getElementById('panelTitle').innerHTML = panelTitles[type] || type;
+  panelTitle.innerHTML = panelTitles[type] || type;
+
+  // Open immediately so user always sees feedback, then hydrate content.
+  panelContent.innerHTML = '<div class="task-empty"><div class="task-empty-icon">⏳</div>loading…</div>';
+  backdrop.classList.add('active');
+  sheet.classList.add('active');
+
+  let html = '';
   if (type === 'log') {
     let logs = [];
     try {
-      if (a.id) { const r = await fetch(`${SUPABASE}/living_log?agent_id=eq.${a.id}&select=*&order=created_at.desc&limit=30`, { headers: H }); logs = await r.json(); }
+      if (a.id) {
+        const r = await fetch(`${SUPABASE}/living_log?agent_id=eq.${a.id}&select=*&order=created_at.desc&limit=30`, { headers: H });
+        if (r.ok) {
+          const d = await r.json();
+          logs = Array.isArray(d) ? d : [];
+        }
+      }
     } catch(e) {}
     html = logs.length
       ? logs.map(l => `<div class="log-entry"><span class="log-emoji" style="font-size:16px">${emojiToIcon(l.emoji||'📋')}</span><span class="log-time">${timeAgo(l.created_at)}</span><span class="log-text">${l.proof_url ? `${esc(l.text)} <a href="${safeUrl(l.proof_url)}" target="_blank">→</a>` : esc(l.text)}</span></div>`).join('')
@@ -3054,14 +3175,28 @@ async function openPanel(type, triggerEl) {
   } else if (type === 'diary') {
     let entries = a.diary || [];
     try {
-      if (a.id) { const r = await fetch(`${SUPABASE}/living_diary?agent_id=eq.${a.id}&select=*&order=created_at.desc&limit=10`, { headers: H }); const d = await r.json(); if (d.length) entries = d.map(x => ({ date: new Date(x.created_at).toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}), text: x.text })); }
+      if (a.id) {
+        const r = await fetch(`${SUPABASE}/living_diary?agent_id=eq.${a.id}&select=*&order=created_at.desc&limit=10`, { headers: H });
+        if (r.ok) {
+          const d = await r.json();
+          if (Array.isArray(d) && d.length) {
+            entries = d.map(x => ({ date: new Date(x.created_at).toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}), text: x.text }));
+          }
+        }
+      }
     } catch(e) {}
     html = entries.length ? entries.map(e => `<div class="diary-entry" style="padding:14px 20px"><div class="diary-date">${e.date||''}</div><div class="diary-text">${esc(e.text)}</div></div>`).join('')
       : '<div class="task-empty"><div class="task-empty-icon">📖</div>no diary entries yet</div>';
   } else if (type === 'skills') {
     let skills = [];
     try {
-      if (a.id) { const r = await fetch(`${SUPABASE}/living_skills?agent_id=eq.${a.id}&select=*&order=category,description`, { headers: H }); skills = await r.json(); }
+      if (a.id) {
+        const r = await fetch(`${SUPABASE}/living_skills?agent_id=eq.${a.id}&select=*&order=category,description`, { headers: H });
+        if (r.ok) {
+          const d = await r.json();
+          skills = Array.isArray(d) ? d : [];
+        }
+      }
     } catch(e) {}
     if (!skills.length) { html = '<div class="task-empty"><div class="task-empty-icon">⚡</div>no skills yet</div>'; }
     else {
@@ -3095,14 +3230,19 @@ async function openPanel(type, triggerEl) {
   } else if (type === 'memory') {
     let facts = [];
     try {
-      if (a.id) { const r = await fetch(`${SUPABASE}/living_memory?agent_id=eq.${a.id}&select=*&order=created_at`, { headers: H }); facts = await r.json(); }
+      if (a.id) {
+        const r = await fetch(`${SUPABASE}/living_memory?agent_id=eq.${a.id}&select=*&order=created_at`, { headers: H });
+        if (r.ok) {
+          const d = await r.json();
+          facts = Array.isArray(d) ? d : [];
+        }
+      }
     } catch(e) {}
     html = facts.length ? facts.map(f => `<div class="memory-fact" style="padding:10px 20px"><span class="memory-bullet" style="color:${a.accent_color}">•</span> ${esc(f.text)}</div>`).join('')
       : '<div class="task-empty"><div class="task-empty-icon">🧠</div>nothing yet</div>';
   }
-  document.getElementById('panelContent').innerHTML = html;
-  document.getElementById('panelBackdrop').classList.add('active');
-  document.getElementById('panelSheet').classList.add('active');
+
+  panelContent.innerHTML = html;
   // start live timers for in-progress tasks
   if (type === 'tasks') startTaskTimers();
 }
@@ -3259,11 +3399,18 @@ async function shareTask(taskId, btn) {
 }
 
 function closePanel() {
-  document.getElementById('panelBackdrop').classList.remove('active');
+  const backdrop = document.getElementById('panelBackdrop');
   const sheet = document.getElementById('panelSheet');
+  if (!backdrop || !sheet) return;
+  backdrop.classList.remove('active');
   sheet.classList.remove('active');
   sheet.style.transformOrigin = 'center bottom';
   clearInterval(_taskTimerInterval);
+}
+
+const _panelBackdropEl = document.getElementById('panelBackdrop');
+if (_panelBackdropEl) {
+  _panelBackdropEl.addEventListener('click', closePanel);
 }
 
 // ===== REPORT =====

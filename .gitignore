@@ -1,2 +1,4 @@
 .env
+app-config.local.js
 __pycache__/
+node_modules/
